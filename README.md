@@ -1,8 +1,15 @@
 # Rust Smart Contract Template
 
 ## Getting started
+Courier services
 
 To get started with this template:
+
+This is a Rust smart contract that allows a courier service company to keep records about the parcels sent and received to various sources and destinations within Kisumu town
+
+It involves;add_package and collect_package
+
+Author- racheal_candy
 
 1. Click the "Use this template" button to create a new repo based on this template
 2. Update line 2 of `Cargo.toml` with your project name
