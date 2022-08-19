@@ -8,9 +8,10 @@ To get started with this template:
 This is a Rust smart contract that allows a courier service company to keep records about the parcels sent and received to various sources and destinations within Kisumu town
 
 It has 2 functionalities
-add_package
 
-collect_package
+1.add_package
+
+2.collect_package
 
 The smart contracts aslo has tests
 
