@@ -7,19 +7,12 @@ To get started with this template:
 
 This is a Rust smart contract that allows a courier service company to keep records about the parcels sent and received to various sources and destinations within Kisumu town
 
-It has 2 functionalities
-add_package
-collect_package
+It involves;add_package and collect_package
+The smart contracts aslo has tests
 
-AUTHOR
-racheal_candy
+## AUTHOR
+Racheal_candy
 
-1. Click the "Use this template" button to create a new repo based on this template
-2. Update line 2 of `Cargo.toml` with your project name
-3. Update line 4 of `Cargo.toml` with your project author names
-4. Set up the [prerequisites](https://github.com/near/near-sdk-rs#pre-requisites)
-5. Begin writing your smart contract in `src/lib.rs`
-6. Test the contract 
 
     `cargo test -- --nocapture`
 
