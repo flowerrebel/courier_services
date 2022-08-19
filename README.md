@@ -9,6 +9,7 @@ This is a Rust smart contract that allows a courier service company to keep reco
 
 It has 2 functionalities
 add_package
+
 collect_package
 
 The smart contracts aslo has tests
