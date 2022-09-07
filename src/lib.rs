@@ -1,6 +1,8 @@
 use near_sdk::borsh::{self, BorshDeserialize, BorshSerialize};
-// use near_sdk::collections::Vector;
-use near_sdk::{env, near_bindgen, AccountId};
+use near_sdk::collections::{UnorderedMap, Vector};
+use near_sdk::serde::{Deserialize, Serialize};
+use near_sdk::{env, near_bindgen, AccountId, Promise};
+ 
 // courier service
 //
 /*  packages
@@ -21,150 +23,192 @@ use near_sdk::{env, near_bindgen, AccountId};
 // *   -> add package
 // *   -> pacage collected
 */
-
+ 
+#[warn(dead_code)]
+fn _one_near() -> u128 {
+    u128::from_str_radix("1000000000000000000000000", 10).unwrap()
+}
+ 
 #[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
 pub struct Packages {
-    id: u8,
+    id: u64,
     source: String,
     destination: String,
-    from_whom: String,
-    to_whom: String,
-    date_sent: String,
-    date_recieved: String,
+    from_whom: AccountId,
+    to_whom: AccountId,
+    cost: u128,
+    date_recieved: u64,
+    date_sent: u64,
     weight: u8,
     is_fragile: bool,
+    is_received: bool,
 }
-
+ 
 // stations
-//   -> muliple packages
+//   -> muliple stations can be in a town
 #[near_bindgen]
-#[derive(BorshDeserialize, BorshSerialize)]
+#[derive(BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone, Debug)]
+#[serde(crate = "near_sdk::serde")]
 pub struct Station {
     name: String,
-    location: String,
+    id: u64,
 }
-
-// impl Default for Station {
-//     fn default() -> Self {
-//         Station {
-//             name: "".to_string(),
-//             packages: vec![], //Vector::new(b"r".to_vec()),
-//         }
-//     }
-// }
-
+ 
 #[near_bindgen]
 #[derive(BorshDeserialize, BorshSerialize)]
 pub struct CourierService {
-    station: Vec<Station>,
-    packages: Vec<Packages>,
+    station: UnorderedMap<String, Vector<Station>>,
+    packages: Vector<Packages>,
 }
-
-#[near_bindgen]
-impl CourierService {
-    #[init]
-    #[private]
-    pub fn new() -> Self {
-        let mut data: Vec<Station> = vec![];
-        let  package: Vec<Packages> = vec![];
-
-        data.push(Station {
-            name: "kisumu_main".to_string(),
-            location: "kisumu".to_string(),
+ 
+impl Default for CourierService {
+    fn default() -> Self {
+        let mut station: UnorderedMap<String, Vector<Station>> = UnorderedMap::new(b"p".to_vec());
+ 
+        let mut nairobi_stations: Vector<Station> = Vector::new(b"r".to_vec());
+        let mut kisumu_stations: Vector<Station> = Vector::new(b"r".to_vec());
+ 
+        nairobi_stations.push(&Station {
+            name: "city-center".to_string(),
+            id: 123,
         });
-        data.push(Station {
-            name: "kisumu_kogello".to_string(),
-            location: "kisumu".to_string(),
+        nairobi_stations.push(&Station {
+            name: "ngara".to_string(),
+            id: 123,
         });
-        Self {
-            station: data,
-            packages: package,
+        kisumu_stations.push(&Station {
+            name: "kondele".to_string(),
+            id: 123,
+        });
+        kisumu_stations.push(&Station {
+            name: "posta".to_string(),
+            id: 123,
+        });
+        station.insert(&"kisumu".to_string(), &nairobi_stations);
+        station.insert(&"nairobi".to_string(), &kisumu_stations);
+ 
+        CourierService {
+            packages: Vector::new(b"r".to_vec()),
+            station: station,
         }
     }
-    /**
-     * near call guest-book.testnet add_package '{"source": "nairobu","destination": "kisumu" , ...}' --account-id example-acct.testnet
-     */
+}
+ 
+#[near_bindgen]
+impl CourierService {
+    pub fn get_stations(&self) -> Vec<Station> {
+        let mut data: Vec<Station> = vec![];
+ 
+        for elem in self.station.values_as_vector().iter() {
+            for st in elem.iter() {
+                data.push(st);
+            }
+        }
+ 
+        data
+    }
+ 
+    pub fn get_packages(&self) -> Vec<Packages> {
+        self.packages.to_vec()
+    }
+ 
+    pub fn register_station(&mut self, town: String, name: String) {
+        let  stations_in_town = self.station.get(&town);
+        let station = &Station {
+            name: name,
+            id: env::block_timestamp(),
+        };
+        match stations_in_town {
+            Some(mut k) => k.push(station),
+            None => {
+                let mut data: Vector<Station> = Vector::new(b"r".to_vec());
+                data.push(station);
+                self.station.insert(&town, &data);
+            }
+        }
+    }
+ 
+    #[payable]
     pub fn add_package(
         &mut self,
         source: String,
         destination: String,
-        from: String,
+        cost: u128,
         to_whom: String,
-        date_sent: String,
-        date_received: String,
         weight: u8,
         is_fragile: bool,
-    ) -> (String, Option<u8>) {
-        let mut source_exist = false;
-        let mut destination_exist = false;
-
-        for elem in self.station.iter() {
-            if elem.name == source {
-                source_exist = true;
-            }
-            if elem.name == destination {
-                destination_exist = true;
-            }
+    ) -> u64 {
+        let pkg_id = env::block_timestamp();
+        if env::account_balance() < cost {
+            env::panic_str("Not enough balance to pay for package");
         }
-
-        if source_exist == false {
-            return (String::from("source does not exist"), None);
-        }
-        if destination_exist == false {
-            return (String::from("destination does not exist"),None);
-        }
-        if source == destination {
-            return (String::from(" source cannot be equal to destination"), None);
-        }
-
-        let random_number = match env::random_seed().get(0) {
-            Some(x) => *x,
-            None => 0,
-        };
-        let package = Packages {
-            id: random_number,
+        let pkg = Packages {
+            id: pkg_id,
             source: source,
             destination: destination,
-            from_whom: from,
-            to_whom: to_whom,
-            date_sent: date_sent,
-            date_recieved: date_received,
+            from_whom: env::signer_account_id(),
+            to_whom: AccountId::new_unchecked(to_whom),
+            cost: cost,
+            date_sent: env::block_timestamp(),
+            date_recieved: env::block_timestamp(),
             weight: weight,
             is_fragile: is_fragile,
+            is_received: false,
         };
-
-        self.packages.push(package);
-
-        return (String::from("okay"), Some(random_number));
+        self.packages.push(&pkg);
+ 
+        Promise::new(env::signer_account_id()).transfer(cost as u128);
+ 
+        pkg_id
     }
-
-    pub fn collect_package(&mut self,  package_id: u8) {
-        for (index, elem) in self.packages.iter_mut().enumerate() {
+ 
+    pub fn collect_package(&mut self, package_id: u64) -> String {
+        let mut pkg_index: Option<u64> = None;
+        for (index, elem) in self.packages.iter().enumerate() {
             if elem.id == package_id {
-                
-                self.packages.remove(index);
-
+                pkg_index = Some(index as u64);
+ 
                 break;
+            }
+        }
+ 
+        match pkg_index {
+            Some(k) => {
+                let mut pkg = self.packages.get(k).unwrap();
+                if pkg.to_whom == env::signer_account_id() {
+                    pkg.is_received= true;
+ 
+                    self.packages.replace(k, &pkg);
+                    "okay".to_string()
+                } else {
+                    env::log_str("only recepient can pick up package");
+                    "error".to_string()
+                }
+            }
+            None => {
+                env::log_str("package not found");
+                "errors".to_owned()
             }
         }
     }
 }
-
+ 
 /*
  * the rest of this file sets up unit tests
  * to run these, the command will be:
  * cargo test --package rust-template -- --nocapture
  * Note: 'rust-template' comes from Cargo.toml's 'name' key
  */
-
+ 
 // use the attribute below for unit tests
 #[cfg(test)]
 mod tests {
     use super::*;
-    use near_sdk::test_utils::{get_logs, VMContextBuilder};
+    use near_sdk::test_utils::{ VMContextBuilder};
     use near_sdk::{testing_env, AccountId};
-
+ 
     // part of writing unit tests is setting up a mock context
     // provide a `predecessor` here, it'll modify the default context
     fn get_context(predecessor: AccountId) -> VMContextBuilder {
@@ -172,37 +216,77 @@ mod tests {
         builder.predecessor_account_id(predecessor);
         builder
     }
-
+ 
     // TESTS HERE
-
-
+ 
+    #[test]
+    fn register_station() {
+        let mut courier = CourierService::default();
+        courier.register_station("nakuru".to_string(), "railways".to_string());
+ 
+        assert_eq!(courier.station.len(), 3)
+    }
+ 
     #[test]
     fn add_package() {
-        let mut courier = CourierService::new();
-        courier.add_package("kisumu_main".to_string(),
-         "kisumu_kogello".to_string(),
-        "richard".to_string(), "moris".to_string(), "12/10/2022".to_string(), "12/10/2022".to_string(), 22,false);
+        let user = AccountId::new_unchecked("kenn.testnet".to_string());
+        let mut _context = get_context(user.clone());
+        let bal = _one_near() * 20;
+        _context.attached_deposit(bal);
+        _context.account_balance(bal);
+        testing_env!(_context.build());
+ 
+        let mut courier = CourierService::default();
+        courier.add_package(
+            "kisumu_main".to_string(),
+            "kisumu_kogello".to_string(),
+            _one_near(),
+            "moris.testnet".to_string(),
+            22,
+            false,
+        );
         assert_eq!(courier.packages.len(), 1);
     }
-
-
+ 
     #[test]
     fn collect_package() {
-        let mut courier = CourierService::new();
-      let res=   courier.add_package("kisumu_main".to_string(),
-         "kisumu_kogello".to_string(),
-        "richard".to_string(), "moris".to_string(), "12/10/2022".to_string(), "12/10/2022".to_string(), 22,false);
-
-        
-       match res.1{
-        Some(k)=>{
-            courier.collect_package(k);
-            assert_eq!(courier.packages.len(),0)
+        let user = AccountId::new_unchecked("kenn.testnet".to_string());
+        let mut _context = get_context(user.clone());
+        let bal = _one_near() * 20;
+        _context.attached_deposit(bal);
+        _context.account_balance(bal);
+        testing_env!(_context.build());
+ 
+        let mut courier = CourierService::default();
+        let package_id = courier.add_package(
+            "kisumu_main".to_string(),
+            "kisumu_kogello".to_string(),
+            _one_near(),
+            "moris.testnet".to_string(),
+            22,
+            false,
+        );
+        assert_eq!(courier.packages.len(), 1);
+ 
+        let user2 = AccountId::new_unchecked("moris.testnet".to_string());
+        _context.signer_account_id(user2);
+        testing_env!(_context.build());
+        let res= courier.collect_package(package_id);
+ 
+        assert_eq!(res,"okay".to_owned());
+        let mut pkg: Option<Packages> = None;
+ 
+        for elem in courier.packages.iter() {
+            if elem.id == package_id {
+                pkg = Some(elem);
+            }
         }
-        None=>{
-            panic!("failed to get package")
+ 
+        match pkg {
+            Some(k) => {
+                assert_eq!(k.is_received, true);
+            }
+            None => env::panic_str("package not fund"),
         }
-       }
     }
-
 }
